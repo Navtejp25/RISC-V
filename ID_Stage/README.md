@@ -1,42 +1,64 @@
 # ID Stage (Instruction Decode)
+// Internal wires
+logic [4:0]  rs1, rs2, rd;
+logic [6:0]  opcode;
+logic [2:0]  fn3;
+logic [11:0] imm;
+logic [19:0] imm_uj;
+logic        reg_write;
+logic        reg_write_gated;
 
-Design the decode stage by connecting the **Decoder**, **Immediate Generator**, **Register File** and **Main Control**.
+// Pass-through outputs from decoder
+assign opcode_out_d = opcode;
+assign fn3_out_d    = fn3;
 
-### Module Specification
+// Gated register write enable: no register is written while stalled
+assign reg_write_gated = reg_write && !stall;
 
-```SystemVerilog
-module id_stage(
-    input  logic        clk,
-    input  logic        reset,
-    input  logic        stall,
-    input  logic [31:0] instruction,
-    input  logic [31:0] wb_data,        // data to write back (from the WB stage)
-    output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data,
-    output logic [31:0] imm_out,
-    output logic [6:0]  opcode_out_d,
-    output logic [6:0]  imm11_5,
-    output logic [2:0]  fn3_out_d,
-    output logic        fn7_5,
-    output logic [2:0]  aluop,
-    output logic [1:0]  memtoreg,
-    output logic        branch,
-    output logic        mem_write,
-    output logic        mem_read,
-    output logic        alu_src,
-    output logic        mux_inp
+// 1. Instruction Decoder
+decoder u_decoder (
+    .instruction (instruction),
+    .rs1         (rs1),
+    .rs2         (rs2),
+    .rd          (rd),
+    .opcode      (opcode),
+    .imm11_5     (imm11_5),
+    .fn3         (fn3),
+    .imm         (imm),
+    .imm_uj      (imm_uj),
+    .fn7_5       (fn7_5)
 );
-```
 
-### Working
+// 2. Immediate Generator
+imm_gen u_imm_gen (
+    .imm         (imm),
+    .imm_uj      (imm_uj),
+    .opcode      (opcode),
+    .imm_out     (imm_out)
+);
 
-- `instruction` goes through the **Decoder**; its `imm` / `imm_uj` / `fn3` / `opcode` feed the **Immediate Generator** (`imm_out`).
-- The decoder's `rs1`, `rs2` select the Register File read ports; its `rd` is the write address.
-- **Main Control** produces `branch`, `memtoreg`, `aluop`, `mem_write`, `alu_src`, `mem_read`, `mux_inp` and the register write enable.
-- The register write enable is gated: **`reg_write && !stall`** (no register is written while stalled).
-- `opcode_out_d`, `fn3_out_d`, `fn7_5`, `imm11_5` are the decoder's outputs, passed on.
+// 3. Register File
+register_file u_register_file (
+    .clk         (clk),
+    .reset       (reset),
+    .reg_write   (reg_write_gated),
+    .rs1_addr    (rs1),
+    .rs2_addr    (rs2),
+    .rd_addr     (rd),
+    .rd_data     (wb_data),
+    .rs1_data    (rs1_data),
+    .rs2_data    (rs2_data)
+);
 
-### Interface
-
-> [!IMPORTANT]
-> Your module, port and parameter names are up to you. Your design must have the same number of ports, with the same directions and widths, as shown above, and must behave as specified. Map your names to this spec in `rnr-stage.yaml` (see the assignment handout).
+// 4. Main Control
+main_control u_main_control (
+    .opcode      (opcode),
+    .branch      (branch),
+    .memtoreg    (memtoreg),
+    .aluop       (aluop),
+    .mem_write   (mem_write),
+    .mem_read    (mem_read),
+    .alu_src     (alu_src),
+    .mux_inp     (mux_inp),
+    .reg_write   (reg_write)
+);
